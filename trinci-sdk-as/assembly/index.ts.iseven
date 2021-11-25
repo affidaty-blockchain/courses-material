@@ -1,0 +1,56 @@
+import { Types, Utils, MemUtils, HostFunctions, MsgPack } from '../node_modules/@affidaty/trinci-sdk-as';
+
+// exposing heap.alloc function for host to pass data
+// to this module
+export function alloc(size: i32): i32 {
+    return heap.alloc(size) as i32;
+}
+// after loading module, host calls this function automatically
+export function run(ctxAddress: i32, ctxSize: i32, argsAddress: i32, argsSize: i32): Types.TCombinedPtr {
+    // decoding context and getting args from memory
+    let ctxU8Arr: u8[] = MemUtils.u8ArrayFromMem(ctxAddress, ctxSize);
+    let ctx = MsgPack.ctxDecode(ctxU8Arr);
+    let argsU8: u8[] = MemUtils.u8ArrayFromMem(argsAddress, argsSize);
+    let methodsMap = new Map<string, (ctx: Types.AppContext, args: u8[])=>Types.TCombinedPtr>();
+
+    // REGISTER YOUR METHODS HERE
+    // See definitions below
+    methodsMap.set('iseven', isEven);
+
+    // ERROR IF METHOD NOT REGISTERED
+    if (!methodsMap.has(ctx.method)) {
+        let success = false;
+        let resultBytes = Utils.stringtoU8Array('Method not found.');
+        return MsgPack.appOutputEncode(success, resultBytes);
+    }
+
+    // CALL METHOD ASSOCIATED TO STRING
+    return methodsMap.get(ctx.method)(ctx, argsU8);
+}
+
+
+@msgpackable
+class IsEvenArgs {
+    number: i32 = 0;
+}
+
+@msgpackable
+class IsEvenReturn {
+    result: bool = false;
+}
+
+function isEven(ctx: Types.AppContext, argsU8: u8[]): Types.TCombinedPtr {
+    // HostFunctions.log('=====================================');
+    // HostFunctions.log('isEven() start');
+    let args = MsgPack.deserialize<IsEvenArgs>(argsU8);
+    // HostFunctions.log(`received number: ${args.number.toString()}`);
+    let ret = new IsEvenReturn();
+    ret.result = args.number % 2 == 0;
+
+    // HostFunctions.log(`result: ${result}`);
+    // resultBytes can be an arbitrary u8[] so you can output data in your own format
+    let success = true;
+
+    // HostFunctions.log('isEven() end')
+    return MsgPack.appOutputEncode(true, MsgPack.serialize<IsEvenReturn>(ret));
+}
